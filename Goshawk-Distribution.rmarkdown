@@ -1,0 +1,160 @@
+---
+title: "GIS Practical"
+format: html
+editor: visual
+---
+
+# Distribution of *Melierax*-goshawks across sub-Saharan Africa and its biomes.
+
+Packages required:
+
+```{r}
+library(tidyverse)
+library(rinat)
+library(mapview)
+library(leafpop)
+library(sf)
+library(RColorBrewer) 
+library(colorspace)
+```
+
+This data is gathered from iNaturalist. Eastern Chanting Goshawk only has around 600 observations, so we will only take 600 observations per goshawk species. First will be Pale Chanting Goshawk, then Dark Chanting Goshawk and finally Eastern Chanting Goshawk.
+
+```{r}
+
+pcg <- get_inat_obs(taxon_name = "Melierax canorus",
+                   bounds = c(-35, 11, -15, 32),
+                   maxresults = 600)
+
+dcg <- get_inat_obs(taxon_name = "Melierax metabates",
+                   bounds = c(-27, -18, 22, 51),
+                   maxresults = 600)
+
+ecg <- get_inat_obs(taxon_name = "Melierax poliopterus",
+                   bounds = c(-8, 29, 18, 51),
+                   maxresults = 600)
+```
+
+## Data Cleanup
+
+Next, we must filter the data to ensure that it is research grade in well within the area it was seen.
+
+```{r}
+pcg <- pcg %>% filter(positional_accuracy < 250 & 
+                captive_cultivated == "false" &
+                quality_grade == "research")
+
+dcg <- dcg %>% filter(positional_accuracy < 250 & 
+                captive_cultivated == "false" &
+                quality_grade == "research")
+
+ecg <- ecg %>% filter(positional_accuracy < 250 & 
+                captive_cultivated == "false" &
+                quality_grade == "research")
+```
+
+Next, we must make these three data frames objects that are of spatial class in order to plot them.
+
+```{r}
+pcg <- st_as_sf(pcg, coords = c("longitude", "latitude"), crs = 4326)
+ecg <- st_as_sf(ecg, coords = c("longitude", "latitude"), crs = 4326)
+dcg <- st_as_sf(dcg, coords = c("longitude", "latitude"), crs = 4326)
+```
+
+## Read and clean biome data
+
+We can also read in the biome data, gathered from the Regional Centre for Mapping of Resources for Development.
+
+```{r}
+Biomes <- st_read("Africa_Biomes_Dataset.shp")
+
+Biomes$FID[Biomes$FID=="1"] <- "Xeric Gsl/Shrub"
+Biomes$FID[Biomes$FID=="2"] <- "Savannah"
+Biomes$FID[Biomes$FID=="3"] <- "Mont Forest"
+Biomes$FID[Biomes$FID=="4"] <- "Dry Deciduous"
+Biomes$FID[Biomes$FID=="5"] <- "Mangrove"
+Biomes$FID[Biomes$FID=="6"] <- "Flooded Gsl"
+Biomes$FID[Biomes$FID=="7"] <- "Mont Moorland"
+Biomes$FID[Biomes$FID=="8"] <- "Lake"
+Biomes$FID[Biomes$FID=="9"] <- "Med Woodland"
+Biomes$FID[Biomes$FID=="10"] <- "Med Mix Forest"
+         
+Biomes <- subset(Biomes, FID != 11)
+```
+
+## Mapping
+
+First, we will ensure that the link to the iNat sighting is functional for each species.
+
+```{r}
+lpcg <- pcg %>%
+  mutate(click_url = paste("<b><a href='", url, "'>Link to iNat observation</a></b>"))
+
+ldcg <- dcg %>%
+  mutate(click_url = paste("<b><a href='", url, "'>Link to iNat observation</a></b>"))
+
+lecg <- ecg %>%
+  mutate(click_url = paste("<b><a href='", url, "'>Link to iNat observation</a></b>"))
+```
+
+### Distribution
+
+Next, we will make a map of the goshawk records for all three species combined, coloured by species and with the size of the point based on how many iNat users agreed with the identification.
+
+```{r}
+
+pal <- mapview(pcg,
+              layer.name = c("Pale Chanting Goshawk"), 
+              cex = "num_identification_agreements", 
+              col.regions = c( "#F8805D"), 
+              popup = 
+                popupTable(lpcg,
+                           zcol = c("observed_on", "click_url")))
+
+dar <- mapview(dcg,
+              layer.name = c("Dark Chanting Goshawk"), 
+              cex = "num_identification_agreements", 
+              col.regions = c("#7680BB"), 
+              popup = 
+                popupTable(ldcg,
+                           zcol = c("observed_on", "click_url")))
+
+eas <- mapview(ecg,
+              layer.name = c("Eastern Chanting Goshawk"), 
+              cex = "num_identification_agreements", 
+              col.regions = c("#FEDE22"), 
+              popup = 
+                popupTable(lecg,
+                           zcol = c("observed_on", "click_url")))
+ 
+compl.dist <- pal + dar + eas      
+```
+
+#### Biomes
+
+Next, we make a map for the biomes and add the two together.
+
+```{r}
+
+## Function for desaturating colors by specified proportion
+desat <- function(cols, sat=0.5) {
+  X <- diag(c(1, sat, 1)) %*% rgb2hsv(col2rgb(cols))
+  hsv(X[1,], X[2,], X[3,])
+}
+
+col.map <- terrain.colors(11)
+col.map20 <- desat(col.map, 0.20)
+
+#Making the map
+Bio <- mapview(Biomes, 
+              zcol = ("FID"),
+             col.regions=col.map20, 
+             popup = 
+          popupTable(Biomes,
+            zcol = c("ECO_NAME")))
+
+#Adding both maps together
+compl.dist + Bio 
+```
+
+Thus we can see the distribution of all three Melierax-species across the African biomes.
