@@ -130,7 +130,7 @@ eas <- mapview(ecg,
 compl.dist <- pal + dar + eas      
 ```
 
-#### Biomes
+### Biomes
 
 Next, we make a map for the biomes and add the two together.
 
